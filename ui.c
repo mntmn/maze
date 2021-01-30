@@ -19,6 +19,11 @@ void ui_px_put(uint16_t x, uint16_t y, px_t color)
   *(pixels + y*SCREEN_W + x) = color;
 }
 
+px_t ui_px_get(uint16_t x, uint16_t y) {
+  if (x<0 || y<0 || x>=SCREEN_W || y>=SCREEN_H) return 0xffffffff;
+  return *(pixels + y*SCREEN_W + x);
+}
+
 void ui_loop_pre(input_t* input) {
   SDL_Event event;
 

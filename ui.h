@@ -11,6 +11,7 @@ typedef struct input {
   int16_t keycode;
 } input_t;
 
+px_t ui_px_get(uint16_t x, uint16_t y);
 void ui_px_put(uint16_t x, uint16_t y, px_t color);
 void ui_loop_pre(input_t* input);
 void ui_loop_post();
