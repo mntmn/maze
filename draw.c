@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "ui.h"
+#include "draw.h"
 #include <math.h>
 
 /* idea: https://www.thecrazyprogrammer.com/2017/02/flood-fill-algorithm-in-c.html */
@@ -34,9 +35,147 @@ void draw_line(int x0, int y0, int x1, int y1, px_t color)
 }
 
 void draw_rect_fill(int x0, int y0, int x1, int y1, px_t color) {
+  if (x0<0) x0=0;
+  if (x1<0) x1=0;
+  if (y0<0) y0=0;
+  if (y1<0) y1=0;
+  if (x0>=SCREEN_W) x0=SCREEN_W-1;
+  if (x1>=SCREEN_W) x1=SCREEN_W-1;
+  if (y0>=SCREEN_H) y0=SCREEN_H-1;
+  if (y1>=SCREEN_H) y1=SCREEN_H-1;
+  
   for (int y=y0; y<=y1; y++) {
     for (int x=x0; x<=x1; x++) {
-      ui_px_put(x, y, color);
+      ui_px_put_preclipped(x, y, color);
     }
   }
+}
+
+void draw_tri_flat(triangle_t *d, px_t color) {
+	int32_t *dataa, *datab, *datac;
+	int32_t xs1, xs2, xs3;
+	int32_t *tempdata;
+
+  uint16_t w = SCREEN_W;
+  uint16_t h = SCREEN_H;
+
+	dataa = d->a;
+	datab = d->b;
+	datac = d->c;
+
+	// Very simple sorting of the three y coordinates
+	if (dataa[1] > datab[1]) {
+		tempdata = dataa;
+		dataa = datab;
+		datab = tempdata;
+	}
+	if (datab[1] > datac[1]) {
+		tempdata = datab;
+		datab = datac;
+		datac = tempdata;
+	}
+	if (dataa[1] > datab[1]) {
+		tempdata = dataa;
+		dataa = datab;
+		datab = tempdata;
+	}
+
+	// Calculate some deltas 
+	int32_t xd1 = datab[0] - dataa[0];
+	int32_t xd2 = datac[0] - dataa[0];
+	int32_t xd3 = datac[0] - datab[0];
+	int32_t yd1 = datab[1] - dataa[1];
+	int32_t yd2 = datac[1] - dataa[1];
+	int32_t yd3 = datac[1] - datab[1];
+
+	// Calculate steps per line while taking care of division by 0
+	if (yd1 != 0) {
+		xs1 = xd1 / yd1;
+	}
+	else {
+		xs1 = xd1;
+	}
+	if (yd2 != 0) {
+		xs2 = xd2 / yd2;
+	}
+	else {
+		xs2 = xd2;
+	}
+	if (yd3 != 0) {
+		xs3 = xd3 / yd3;
+	}
+	else {
+		xs3 = xd3;
+	}
+	
+	/*
+	 xs: xstep=delta x
+	 xw: current x-value used in loop
+	*/
+	/*
+	 Start values for the first part (up to y of point 2)
+	 xw1 and xw2 are x-values for the current line. The triangle is drawn from
+	 top to bottom line after line...
+	 txw, tyw and gw are values for texture and brightness
+	 always for start- and ending-point of the current line
+	 A line is also called "Span".
+	*/
+
+	int32_t xw1 = dataa[0]; //pax
+	int32_t xw2 = dataa[0];
+  
+	if (yd1) {
+		for (int sz = dataa[1]; sz <= datab[1]; sz++) {
+			// draw if y is inside the screen (clipping)   
+			if (sz >= h)
+				break;
+			if (sz >= 0 && sz < h) {
+				int32_t xed = (xw1 < xw2) ? xw1 : xw2;
+				int32_t xed2 = (xw1 < xw2) ? xw2 : xw1;
+				xed = (xed  >> 16);
+				xed2 = (xed2  >> 16);
+				if ((xed < 0 && xed2 < 0) || (xed >= w && xed2 >= w) || (xed == xed2))
+					goto skip_span;
+				if (xed < 0) xed = 0;
+				if (xed2 >= w) xed2 = w - 1;
+
+				int clear_w = (xed == xed2) ? 1 : xed2 - xed;
+        ui_span_preclipped(xed, sz, clear_w, color);
+				
+        skip_span:;
+			}
+			xw1 += xs1;
+			xw2 += xs2;
+		}
+	}
+	
+	/*
+	 New start values for the second part of the triangle
+	*/
+	xw1 = datab[0] + xs3;
+  
+	if (yd3) { //If Span-Height 1 or higher
+		for (int sz=datab[1] + 1; sz < datac[1]; sz++)
+		{
+			if (sz >=h )
+				break;
+
+			if (sz >= 0 && sz < (h - 1)) {
+				int32_t xed = (xw1 < xw2) ? xw1 : xw2;
+				int32_t xed2 = (xw1 < xw2) ? xw2 : xw1;
+				xed = (xed  >> 16);
+				xed2 = (xed2 >> 16);
+				if ((xed < 0 && xed2 < 0) || (xed >= w && xed2 >= w) || (xed == xed2))
+					goto skip_span2;
+				if (xed < 0) xed = 0;
+				if (xed2 >= w) xed2 = w - 1;
+
+				int clear_w = (xed == xed2) ? 1 : xed2 - xed;
+        ui_span_preclipped(xed, sz, clear_w, color);
+				skip_span2:;
+			}
+			xw1 += xs3;
+			xw2 += xs2;
+		}
+	}
 }

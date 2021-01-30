@@ -13,6 +13,8 @@ typedef struct input {
 
 px_t ui_px_get(uint16_t x, uint16_t y);
 void ui_px_put(uint16_t x, uint16_t y, px_t color);
+void ui_span_preclipped(uint16_t x, uint16_t y, uint16_t w, px_t color);
+void ui_px_put_preclipped(uint16_t x, uint16_t y, px_t color);
 void ui_loop_pre(input_t* input);
 void ui_loop_post();
 int  ui_init(char* title);

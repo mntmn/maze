@@ -5,8 +5,7 @@
 
 #include "ui.h"
 
-#define SCREEN_W 1920/2
-#define SCREEN_H 1080/2
+#define SCALE 2
 
 SDL_Window* sdl_window;
 SDL_Renderer* sdl_renderer;
@@ -17,6 +16,20 @@ void ui_px_put(uint16_t x, uint16_t y, px_t color)
 {
   if (x<0 || y<0 || x>=SCREEN_W || y>=SCREEN_H) return;
   *(pixels + y*SCREEN_W + x) = color;
+}
+
+void ui_px_put_preclipped(uint16_t x, uint16_t y, px_t color)
+{
+  *(pixels + y*SCREEN_W + x) = color;
+}
+
+void ui_span_preclipped(uint16_t x, uint16_t y, uint16_t w, px_t color)
+{
+  //printf("span: %d:%d w %d color %x\n",x,y,w,color);
+  if (x>SCREEN_W || y>SCREEN_H) exit(0);
+  for (uint16_t i=x; i<x+w; i++) {
+    *(pixels + y*SCREEN_W + i) = color;
+  }
 }
 
 px_t ui_px_get(uint16_t x, uint16_t y) {
@@ -88,7 +101,7 @@ int ui_init(char* title) {
   sdl_window = SDL_CreateWindow(title,
                                 SDL_WINDOWPOS_UNDEFINED,
                                 SDL_WINDOWPOS_UNDEFINED,
-                                SCREEN_W, SCREEN_H,
+                                SCREEN_W*SCALE, SCREEN_H*SCALE,
                                 SDL_WINDOW_OPENGL);
 
   if (!sdl_window) {
@@ -110,7 +123,7 @@ int ui_init(char* title) {
 			       SDL_TEXTUREACCESS_STREAMING,
 			       SCREEN_W, SCREEN_H);
 
-  SDL_RenderSetLogicalSize(sdl_renderer, SCREEN_W, SCREEN_H);
+  SDL_RenderSetLogicalSize(sdl_renderer, SCREEN_W*SCALE, SCREEN_H*SCALE);
   
   pixels = (px_t*)malloc(SCREEN_W*SCREEN_H*sizeof(px_t));
 
