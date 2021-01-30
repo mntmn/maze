@@ -1,3 +1,6 @@
+#ifndef _UI_H
+#define _UI_H
+
 #include <stdint.h>
 #include "platform.h"
 
@@ -11,5 +14,7 @@ typedef struct input {
 void ui_px_put(uint16_t x, uint16_t y, px_t color);
 void ui_loop_pre(input_t* input);
 void ui_loop_post();
-int ui_init(char* title);
+int  ui_init(char* title);
 void ui_exit();
+
+#endif
