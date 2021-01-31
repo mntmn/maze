@@ -125,8 +125,8 @@ void render_actors_view(actor_t* actor) {
             int32_t y4 = cy + ((y+1)*scale)/(z+1);
 
             if (sec.props&PROP_WIRE) {
-              int lx = sin(T)*10;
-              int ly = cos(T)*8;
+              int lx = sin(T)*2;
+              int ly = cos(T)*5;
               
               // local fuzz
               x1+=lx;
@@ -312,10 +312,14 @@ void process_gravity(actor_t* player) {
       player->y++;
     }
   } else {
-    // :O
-    player->y=0;
+    /*
+      you left the map = won!
+    */
+    
   }
 }
+
+uint32_t STR_GAME_OVER[] = {'G','A','M','E',' ','O','V','E','R',0};
 
 int main(int argc, char** argv) {
   uint8_t running = 1;
@@ -323,6 +327,8 @@ int main(int argc, char** argv) {
   actor_t player;
   int last_keycode=0;
 
+  draw_load_font();
+  
   player.name = "i";
   player.x = 127;
   player.y = 127;
@@ -396,9 +402,12 @@ int main(int argc, char** argv) {
     last_keycode = input.keycode;
 
     //printf("%d %d %d key: %d\n",player.x,player.y,player.z,input.keycode);
+
+    draw_string_u32(192, 238, STR_GAME_OVER, 0xff00ff, 4);
     
     ui_loop_post();
   }
 
+  draw_free_font();
   ui_exit();
 }

@@ -1,3 +1,5 @@
+#include <stdio.h>
+#include <malloc.h>
 #include <stdint.h>
 #include "ui.h"
 #include "draw.h"
@@ -178,4 +180,54 @@ void draw_tri_flat(triangle_t *d, px_t color) {
 			xw2 += xs2;
 		}
 	}
+}
+
+#define FONT_HDR 130
+#define FONT_PITCH 256
+#define FONT_BMP_PITCH 4128/8
+#define FONT_BMP_HEIGHT 4112
+
+uint8_t* data_font;
+
+void draw_load_font() {
+  FILE *f = fopen("unifont0.bmp", "rb");
+  fseek(f, 0, SEEK_END);
+  long fsize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  data_font = (uint8_t*)malloc(fsize + 1);
+  fread(data_font, 1, fsize, f);
+  fclose(f);
+}
+
+void draw_free_font() {
+  free(data_font);
+}
+
+void draw_character(uint16_t dx, uint16_t dy, uint32_t c, px_t color, uint16_t scl) {
+  int row = c/FONT_PITCH;
+  int col = c%FONT_PITCH;
+
+  for (int y=0; y<16; y++) {
+    uint8_t px1 = data_font[FONT_HDR + FONT_BMP_HEIGHT*FONT_BMP_PITCH - ((row+1)*16+y+1)*FONT_BMP_PITCH + ((col+1)*2)];
+    uint8_t px2 = data_font[FONT_HDR + FONT_BMP_HEIGHT*FONT_BMP_PITCH - ((row+1)*16+y+1)*FONT_BMP_PITCH + ((col+1)*2+1)];
+    for (int x=0; x<8; x++) {
+      if (~px1 & (1<<(7-x))) {
+        draw_rect_fill(dx+x*scl, dy+y*scl, dx+(x+1)*scl-1, dy+(y+1)*scl-1, color);
+      }
+    }
+    for (int x=0; x<8; x++) {
+      if (~px2 & (1<<(7-x))) {
+        draw_rect_fill(dx+(x+8)*scl, dy+y*scl, dx+(x+1+8)*scl-1, dy+(y+1)*scl-1, color);
+      }
+    }
+  }
+}
+
+void draw_string_u32(uint16_t dx, uint16_t dy, uint32_t* str, px_t color, uint16_t scl) {
+  int i=0;
+  while (str[i]!=0) {
+    draw_character(dx+16*scl*i, dy, str[i], color, scl);
+    i++;
+  }
 }
