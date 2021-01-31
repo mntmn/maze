@@ -37,12 +37,18 @@ typedef struct actor {
   uint16_t y;
   uint16_t z;
   int8_t look; // view rotation around y axis; index into look_xz list
+  int8_t health;
 } actor_t;
 
 int8_t rot_walk_x[] = {0,1,0,-1};
 int8_t rot_walk_z[] = {1,0,-1,0};
 int8_t rot_strafe_x[] = {1,0,-1,0};
 int8_t rot_strafe_z[] = {0,-1,0,1};
+
+int NUM_ENEMIES = 1;
+
+actor_t player;
+actor_t enemies[32];
 
 void world_put(uint8_t x, uint8_t y, uint8_t z, sector_t sec) {
   world[DIM_Y*DIM_X*z + DIM_X*y + x] = sec;
@@ -66,7 +72,16 @@ uint32_t color_darken(uint32_t color, int lz) {
   return color;
 }
 
+uint32_t pr_next = 1;
+
+int16_t pseudo_rand(void)
+{
+    pr_next = pr_next * 1103515243 + 12345;
+    return (int16_t)(pr_next / 65536) % 32768;
+}
+
 float T = 0.0;
+int fx_wound = 0;
 
 void render_actors_view(actor_t* actor) {
   int ax=actor->x;
@@ -114,6 +129,9 @@ void render_actors_view(actor_t* actor) {
             int z = rz;
             int lz = (rz+1)/2;
             if (lz<1) lz=1;
+            if (player.health<5) lz+=2;
+            if (player.health<3) lz+=4;
+            if (player.health<2) lz+=8;
             
             color = color_darken(sec.color, lz);
             
@@ -237,18 +255,48 @@ void render_actors_view(actor_t* actor) {
 
             //draw_fill(x1+1, y1+1, color);
           }
+
+          // render enemies
+
+          for (int i=0; i<NUM_ENEMIES; i++) {
+            if (enemies[i].x==wx && enemies[i].y==wy && enemies[i].z==wz) {
+              int z = rz;
+              int lz = (rz+1)/2;
+              if (lz<1) lz=1;
+                        
+              /* project */
+              int32_t x1 = cx + (x*scale)/z;
+              int32_t x2 = cx + ((x+1)*scale)/z;
+              int32_t x3 = cx + (x*scale)/(z+1);
+              int32_t x4 = cx + ((x+1)*scale)/(z+1);
+          
+              int32_t y1 = cy + (y*scale)/z;
+              int32_t y2 = cy + ((y+1)*scale)/z;
+              int32_t y3 = cy + (y*scale)/(z+1);
+              int32_t y4 = cy + ((y+1)*scale)/(z+1);
+
+              int32_t x5 = (x1+x2)/2;
+              int32_t x6 = (x3+x4)/2;
+
+              triangle_t tri = (triangle_t) {
+                {x5<<16, y1},
+                {x1<<16, y2},
+                {x2<<16, y2},
+              };
+              draw_tri_flat(&tri, 0xff0000);
+            }
+          }
         }
       }
     }
   }
-}
 
-uint32_t pr_next = 1;
-
-int16_t pseudo_rand(void)
-{
-    pr_next = pr_next * 1103515243 + 12345;
-    return (int16_t)(pr_next / 65536) % 32768;
+  if (fx_wound) {
+    draw_rect_fill(0, 0, SCREEN_W-1, SCREEN_H-1, 0xff0000);
+    draw_string_u32(200+pseudo_rand()/1000, 100+pseudo_rand()/1000,
+                    (uint32_t[]){'A','R','G','H',0}, 0, 8);
+    fx_wound--;
+  }
 }
 
 void seed_world() {
@@ -308,7 +356,7 @@ void seed_world() {
   world_put(127, 128, 130, sec);
 }
 
-void process_gravity(actor_t* player) {
+int process_gravity(actor_t* player) {
   int wx=player->x;
   int wy=player->y+1;
   int wz=player->z;
@@ -316,12 +364,52 @@ void process_gravity(actor_t* player) {
     if (!(world_get(wx,wy,wz).props&PROP_SOLID)) {
       player->y++;
     }
+    return 0;
   } else {
-    /*
-      you left the map = won!
-    */
-    game_state = GST_WON;
+    return 1;
   }
+}
+
+#define ERES_NONE 0
+#define ERES_WOUND 1
+
+int process_enemies(int step) {
+  int res = ERES_NONE;
+  
+  for (int i=0; i<NUM_ENEMIES; i++) {
+    int dx=0, dz=0;
+    process_gravity(&enemies[i]);
+
+    if (step) {
+      // move towards player
+      if (player.x>enemies[i].x+1) {
+        dx = 1;
+      }
+      if (player.x<enemies[i].x-1) {
+        dx = -1;
+      }
+      if (player.z>enemies[i].z+1) {
+        dz = 1;
+      }
+      if (player.z<enemies[i].z-1) {
+        dz = -1;
+      }
+
+      if (dx||dz) {
+        if (pseudo_rand()>0) {
+          enemies[i].x+=dx;
+        } else {
+          enemies[i].z+=dz;
+        }
+      } else if (enemies[i].y == player.y) {
+        /* enemy attacks */
+        player.health--;
+        res = ERES_WOUND;
+      }
+    }
+  }
+
+  return res;
 }
 
 uint32_t STR_GAME_OVER[] = {'G','A','M','E',' ','O','V','E','R',0};
@@ -330,13 +418,17 @@ uint32_t STR_GAME_INTRO1[] = {'E','S','C','A','P','E',0};
 uint32_t STR_GAME_INTRO2[] = {'T','H','E',0};
 uint32_t STR_GAME_INTRO3[] = {'M','A','Z','E',0};
 
-actor_t player;
-
 void init_game() {
   player.name = "i";
   player.x = 127;
   player.y = 127;
   player.z = 122;
+  player.health = 10;
+
+  enemies[0].x = 127;
+  enemies[0].y = 40;
+  enemies[0].z = 129;
+  enemies[0].health = 10;
   
   seed_world();
 }
@@ -345,6 +437,7 @@ int main(int argc, char** argv) {
   uint8_t running = 1;
   input_t input;
   int last_keycode=0;
+  int last_timer=0;
 
   draw_load_font();
 
@@ -414,7 +507,29 @@ int main(int argc, char** argv) {
         }
       }
 
-      process_gravity(&player);
+      int enemy_step = 0;
+      int timer = ((int)T)%3;
+      //printf("timer: %d\n",timer);
+      if (timer==0 && timer!=last_timer) enemy_step = 1;
+
+      last_timer = timer;
+
+      int eres = process_enemies(enemy_step);
+
+      if (eres == ERES_WOUND) {
+        fx_wound = 5;
+      }
+      
+      if (process_gravity(&player) == 1) {
+        /*
+          you left the map = won!
+        */
+        game_state = GST_WON;
+      }
+
+      if (player.health<1) {
+        game_state = GST_LOST;
+      }
     } else if (game_state == GST_LOST) {
       uint16_t rand_offset = pseudo_rand()%0xff00;
       if (((int)T)%20 != 0) rand_offset = 0xfee0;
