@@ -5,8 +5,6 @@
 
 #include "ui.h"
 
-#define SCALE 2
-
 SDL_Window* sdl_window;
 SDL_Renderer* sdl_renderer;
 SDL_Texture* sdl_texture;

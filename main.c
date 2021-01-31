@@ -28,7 +28,13 @@ typedef struct actor {
   uint16_t x;
   uint16_t y;
   uint16_t z;
+  int8_t look; // view rotation around y axis; index into look_xz list
 } actor_t;
+
+int8_t rot_walk_x[] = {0,1,0,-1};
+int8_t rot_walk_z[] = {1,0,-1,0};
+int8_t rot_strafe_x[] = {1,0,-1,0};
+int8_t rot_strafe_z[] = {0,-1,0,1};
 
 void world_put(uint8_t x, uint8_t y, uint8_t z, sector_t sec) {
   world[DIM_Y*DIM_X*z + DIM_X*y + x] = sec;
@@ -65,12 +71,32 @@ void render_actors_view(actor_t* actor) {
   int cy = SCREEN_H/2;
   
   int scale = SCREEN_W/4;
+
+  int xstep = 1;
+  int zstep = -1;
   
-  for (int rz=vd; rz>0; rz--) {
+  for (int rz=vd; rz!=0; rz+=zstep) {
     for (int y=-vh; y<=vh; y++) {
-      for (int x=-vw; x<=vw; x++) {
-        if (in_bounds(ax+x,ay+y,az+rz)) {
-          sector_t sec = world_get(ax+x,ay+y,az+rz);
+      for (int x=-vw; x<=vw; x+=xstep) {
+        int wx, wy, wz;
+        wy = ay+y;
+        
+        if (actor->look == 0) {
+          wx = ax+x;
+          wz = az+rz;
+        } else if (actor->look == 1) {
+          wx = ax+rz;
+          wz = az-x;
+        } else if (actor->look == 2) {
+          wx = ax-x;
+          wz = az-rz;
+        } else if (actor->look == 3) {
+          wx = ax-rz;
+          wz = az+x;
+        }
+        
+        if (in_bounds(wx,wy,wz)) {
+          sector_t sec = world_get(wx,wy,wz);
 
           px_t color = 0x333333;
 
@@ -224,26 +250,44 @@ int main(int argc, char** argv) {
       if (input.keycode == 27) {
         running = 0;
       }
-      else if (input.keycode == 82) {
-        player.z++;
+      else if (input.keycode == 82 || input.keycode == 119) {
+        // north
+        player.x+=rot_walk_x[player.look];
+        player.z+=rot_walk_z[player.look];
       }
-      else if (input.keycode == 81) {
-        player.z--;
+      else if (input.keycode == 81 || input.keycode == 115) {
+        // south
+        player.x-=rot_walk_x[player.look];
+        player.z-=rot_walk_z[player.look];
       }
       else if (input.keycode == 79) {
-        player.x++;
+        // east
+        player.look=(player.look+1)%4;
       }
       else if (input.keycode == 80) {
-        player.x--;
+        // west
+        player.look=player.look==0 ? 3 : player.look-1;
+      }
+      else if (input.keycode == 97) {
+        // A
+        player.x-=rot_strafe_x[player.look];
+        player.z-=rot_strafe_z[player.look];
+      }
+      else if (input.keycode == 100) {
+        // D
+        player.x+=rot_strafe_x[player.look];
+        player.z+=rot_strafe_z[player.look];
       }
       else if (input.keycode == 78) {
+        // up
         player.y++;
       }
       else if (input.keycode == 75) {
+        // down
         player.y--;
       }
       else if (input.keycode == 32) {
-        // space
+        // action
         world_put(player.x, player.y, player.z+2, (sector_t){
             PROP_WIRE,
             0x0000ff,
