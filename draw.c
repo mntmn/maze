@@ -231,3 +231,11 @@ void draw_string_u32(uint16_t dx, uint16_t dy, uint32_t* str, px_t color, uint16
     i++;
   }
 }
+
+void draw_string_u32_offset(uint16_t dx, uint16_t dy, uint32_t* str, px_t color, uint16_t scl, uint16_t offset) {
+  int i=0;
+  while (str[i]!=0) {
+    draw_character(dx+16*scl*i, dy, str[i]+offset, color, scl);
+    i++;
+  }
+}

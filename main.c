@@ -13,6 +13,13 @@
 #define PROP_SOLID 2
 #define PROP_WIRE 1
 
+#define GST_INTRO 0
+#define GST_PLAY 1
+#define GST_WON 2
+#define GST_LOST 3
+
+int game_state = GST_INTRO;
+
 typedef struct sector {
   uint16_t props;
   px_t color;
@@ -77,8 +84,6 @@ void render_actors_view(actor_t* actor) {
 
   int xstep = 1;
   int zstep = -1;
-
-  T += 0.1;
   
   for (int rz=vd; rz!=0; rz+=zstep) {
     for (int y=-vh; y<=vh; y++) {
@@ -315,96 +320,151 @@ void process_gravity(actor_t* player) {
     /*
       you left the map = won!
     */
-    
+    game_state = GST_WON;
   }
 }
 
 uint32_t STR_GAME_OVER[] = {'G','A','M','E',' ','O','V','E','R',0};
+uint32_t STR_GAME_WON[] = {'*','Y','O','U',' ','W','O','N','*',0};
+uint32_t STR_GAME_INTRO1[] = {'E','S','C','A','P','E',0};
+uint32_t STR_GAME_INTRO2[] = {'T','H','E',0};
+uint32_t STR_GAME_INTRO3[] = {'M','A','Z','E',0};
 
-int main(int argc, char** argv) {
-  uint8_t running = 1;
-  input_t input;
-  actor_t player;
-  int last_keycode=0;
+actor_t player;
 
-  draw_load_font();
-  
+void init_game() {
   player.name = "i";
   player.x = 127;
   player.y = 127;
   player.z = 122;
-
+  
   seed_world();
+}
+
+int main(int argc, char** argv) {
+  uint8_t running = 1;
+  input_t input;
+  int last_keycode=0;
+
+  draw_load_font();
+
+  init_game();
   
   ui_init("MAZE");
   
   while (running) {
+    T += 0.1;
+
     ui_loop_pre(&input);
 
     draw_rect_fill(0, 0, SCREEN_W-1, SCREEN_H-1, 0);
 
     render_actors_view(&player);
 
-    if (last_keycode!=input.keycode) {
-      if (input.keycode == 27) {
-        running = 0;
+    if (game_state == GST_PLAY) {
+      if (last_keycode!=input.keycode) {
+        if (input.keycode == 27) {
+          game_state = GST_LOST;
+        }
+        else if (input.keycode == 82 || input.keycode == 119) {
+          // north
+          player.x+=rot_walk_x[player.look];
+          player.z+=rot_walk_z[player.look];
+        }
+        else if (input.keycode == 81 || input.keycode == 115) {
+          // south
+          player.x-=rot_walk_x[player.look];
+          player.z-=rot_walk_z[player.look];
+        }
+        else if (input.keycode == 79) {
+          // east
+          player.look=(player.look+1)%4;
+        }
+        else if (input.keycode == 80) {
+          // west
+          player.look=player.look==0 ? 3 : player.look-1;
+        }
+        else if (input.keycode == 97) {
+          // A
+          player.x-=rot_strafe_x[player.look];
+          player.z-=rot_strafe_z[player.look];
+        }
+        else if (input.keycode == 100) {
+          // D
+          player.x+=rot_strafe_x[player.look];
+          player.z+=rot_strafe_z[player.look];
+        }
+        else if (input.keycode == 78) {
+          // up
+          player.y++;
+        }
+        else if (input.keycode == 75) {
+          // down
+          player.y--;
+        }
+        else if (input.keycode == 32) {
+          // action
+          world_put(player.x, player.y, player.z+2, (sector_t){
+              PROP_SOLID,
+              0x0000ff,
+              0,
+              0,
+              0
+            });
+        }
       }
-      else if (input.keycode == 82 || input.keycode == 119) {
-        // north
-        player.x+=rot_walk_x[player.look];
-        player.z+=rot_walk_z[player.look];
+
+      process_gravity(&player);
+    } else if (game_state == GST_LOST) {
+      uint16_t rand_offset = pseudo_rand()%0xff00;
+      if (((int)T)%20 != 0) rand_offset = 0xfee0;
+      draw_string_u32_offset(192, 238, STR_GAME_OVER, 0xff00ff, 4, rand_offset);
+
+      if (last_keycode!=input.keycode) {
+        if (input.keycode == 27) {
+          init_game();
+          game_state = GST_INTRO;
+        } else if (input.keycode == 32) {
+          init_game();
+          game_state = GST_INTRO;
+        }
       }
-      else if (input.keycode == 81 || input.keycode == 115) {
-        // south
-        player.x-=rot_walk_x[player.look];
-        player.z-=rot_walk_z[player.look];
+    } else if (game_state == GST_INTRO) {
+      uint16_t rand_offset = pseudo_rand()%0xff00;
+      if (((int)T)%20 != 0) rand_offset = 0xfee0;
+      draw_string_u32_offset(240, 138, STR_GAME_INTRO1, 0x00ffff, 4, rand_offset);
+      draw_string_u32_offset(240, 238, STR_GAME_INTRO2, 0x00ffff, 4, rand_offset);
+      draw_string_u32_offset(240, 338, STR_GAME_INTRO3, 0x00ffff, 4, rand_offset);
+
+      if (last_keycode!=input.keycode) {
+        if (input.keycode == 27) {
+          running = 0;
+        } else if (input.keycode == 32) {
+          init_game();
+          game_state = GST_PLAY;
+        }
       }
-      else if (input.keycode == 79) {
-        // east
-        player.look=(player.look+1)%4;
-      }
-      else if (input.keycode == 80) {
-        // west
-        player.look=player.look==0 ? 3 : player.look-1;
-      }
-      else if (input.keycode == 97) {
-        // A
-        player.x-=rot_strafe_x[player.look];
-        player.z-=rot_strafe_z[player.look];
-      }
-      else if (input.keycode == 100) {
-        // D
-        player.x+=rot_strafe_x[player.look];
-        player.z+=rot_strafe_z[player.look];
-      }
-      else if (input.keycode == 78) {
-        // up
-        player.y++;
-      }
-      else if (input.keycode == 75) {
-        // down
-        player.y--;
-      }
-      else if (input.keycode == 32) {
-        // action
-        world_put(player.x, player.y, player.z+2, (sector_t){
-            PROP_SOLID,
-            0x0000ff,
-            0,
-            0,
-            0
-          });
+
+    } else if (game_state == GST_WON) {
+      uint16_t rand_offset = pseudo_rand()%0xff00;
+      if (((int)T)%20 != 0) rand_offset = 0xfee0;
+      draw_string_u32_offset(192, 238, STR_GAME_WON, 0xff00ff, 4, rand_offset);
+
+      if (last_keycode!=input.keycode) {
+        if (input.keycode == 27) {
+          init_game();
+          game_state = GST_INTRO;
+        } else if (input.keycode == 32) {
+          init_game();
+          game_state = GST_INTRO;
+        }
       }
     }
-
-    process_gravity(&player);
     
     last_keycode = input.keycode;
 
     //printf("%d %d %d key: %d\n",player.x,player.y,player.z,input.keycode);
 
-    draw_string_u32(192, 238, STR_GAME_OVER, 0xff00ff, 4);
-    
     ui_loop_post();
   }
 

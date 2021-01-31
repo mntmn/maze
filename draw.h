@@ -16,3 +16,4 @@ void draw_character(uint16_t dx, uint16_t dy, uint32_t c, px_t color, uint16_t s
 void draw_load_font();
 void draw_free_font();
 void draw_string_u32(uint16_t dx, uint16_t dy, uint32_t* str, px_t color, uint16_t scl);
+void draw_string_u32_offset(uint16_t dx, uint16_t dy, uint32_t* str, px_t color, uint16_t scl, uint16_t offset);
