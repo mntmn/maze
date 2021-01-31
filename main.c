@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <math.h>
 
 #include "platform.h"
 #include "ui.h"
@@ -58,6 +59,8 @@ uint32_t color_darken(uint32_t color, int lz) {
   return color;
 }
 
+float T = 0.0;
+
 void render_actors_view(actor_t* actor) {
   int ax=actor->x;
   int ay=actor->y;
@@ -74,6 +77,8 @@ void render_actors_view(actor_t* actor) {
 
   int xstep = 1;
   int zstep = -1;
+
+  T += 0.1;
   
   for (int rz=vd; rz!=0; rz+=zstep) {
     for (int y=-vh; y<=vh; y++) {
@@ -119,16 +124,21 @@ void render_actors_view(actor_t* actor) {
             int32_t y3 = cy + (y*scale)/(z+1);
             int32_t y4 = cy + ((y+1)*scale)/(z+1);
 
-            // local fuzz
-            x1+=sec.lx;
-            x2+=sec.lx;
-            x3+=sec.lx;
-            x4+=sec.lx;
+            if (sec.props&PROP_WIRE) {
+              int lx = sin(T)*10;
+              int ly = cos(T)*8;
+              
+              // local fuzz
+              x1+=lx;
+              x2+=lx;
+              x3+=lx;
+              x4+=lx;
             
-            y1+=sec.ly;
-            y2+=sec.ly;
-            y3+=sec.ly;
-            y4+=sec.ly;            
+              y1+=ly;
+              y2+=ly;
+              y3+=ly;
+              y4+=ly;
+            }
           
             if (sec.props&PROP_SOLID) {
               // the back is never visible
@@ -242,21 +252,21 @@ void seed_world() {
     
     if (r>32700) {
       sector_t sec = {
-        PROP_SOLID,
-        0xff0000,
+        PROP_WIRE,
+        0xffffff,
         0,0,0
       };
       world[i]=sec;
     }
     else if (r>32000) {
-      sector_t sec = {
+      /*sector_t sec = {
         PROP_WIRE,
         0xffffff,
         pseudo_rand()/2000,
         pseudo_rand()/2000,
         pseudo_rand()/2000,
       };
-      world[i]=sec;
+      world[i]=sec;*/
     }
   }
 
@@ -265,11 +275,45 @@ void seed_world() {
     0xffffff,
     0,0,0
   };
-  for (int z=10; z<250; z++) {
-    world_put(125, 129, z, sec);
-    world_put(126, 129, z, sec);
-    world_put(127, 129, z, sec);
-    world_put(128, 129, z, sec);
+
+  // ground
+  for (int x=0; x<DIM_X; x++) {
+    for (int z=0; z<DIM_Z; z++) {
+      sec.props = PROP_SOLID;
+      sec.color = 0x008800;
+      world_put(x, 128, z, sec);
+    }
+  }
+
+  // underground 1
+  for (int x=127-5; x<127+5; x++) {
+    for (int z=127-5; z<127+5; z++) {
+      sec.props = PROP_SOLID;
+      sec.color = 0x880000;
+      world_put(x, 180, z, sec);
+    }
+  }
+
+  // a hole in the ground
+  sec.props = 0;
+  sec.color = 0;
+  world_put(126, 128, 131, sec);
+  world_put(127, 128, 131, sec);
+  world_put(126, 128, 130, sec);
+  world_put(127, 128, 130, sec);
+}
+
+void process_gravity(actor_t* player) {
+  int wx=player->x;
+  int wy=player->y+1;
+  int wz=player->z;
+  if (in_bounds(wx, wy, wz)) {
+    if (!(world_get(wx,wy,wz).props&PROP_SOLID)) {
+      player->y++;
+    }
+  } else {
+    // :O
+    player->y=0;
   }
 }
 
@@ -338,18 +382,20 @@ int main(int argc, char** argv) {
       else if (input.keycode == 32) {
         // action
         world_put(player.x, player.y, player.z+2, (sector_t){
-            PROP_WIRE,
+            PROP_SOLID,
             0x0000ff,
-            pseudo_rand()/2000,
-            pseudo_rand()/2000,
-            pseudo_rand()/2000
+            0,
+            0,
+            0
           });
       }
     }
+
+    process_gravity(&player);
     
     last_keycode = input.keycode;
 
-    printf("%d %d %d key: %d\n",player.x,player.y,player.z,input.keycode);
+    //printf("%d %d %d key: %d\n",player.x,player.y,player.z,input.keycode);
     
     ui_loop_post();
   }
