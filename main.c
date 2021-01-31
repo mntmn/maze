@@ -131,6 +131,7 @@ void render_actors_view(actor_t* actor) {
             y4+=sec.ly;            
           
             if (sec.props&PROP_SOLID) {
+              // the back is never visible
               //draw_rect_fill(x3, y3, x4, y4, color_darken(color,2));
             } else {
               draw_line(x1, y1, x2, y1, color);
@@ -140,7 +141,9 @@ void render_actors_view(actor_t* actor) {
             }
 
             if (sec.props&PROP_SOLID) {
-              //printf("x1: %d x2: %d x3: %d\n",x1,x2,x3);
+              px_t color2 = color_darken(sec.color, 2);
+              
+              // top
               triangle_t tri = {
                 {(x1)<<16, y1},
                 {(x3)<<16, y3},
@@ -154,6 +157,51 @@ void render_actors_view(actor_t* actor) {
                 {x2<<16, y1},
               };
               draw_tri_flat(&tri, color);
+
+              // bottom
+              tri = (triangle_t) {
+                {x1<<16, y2},
+                {x3<<16, y4},
+                {x2<<16, y2},
+              };
+              draw_tri_flat(&tri, color);
+              
+              tri = (triangle_t) {
+                {x4<<16, y4},
+                {x3<<16, y4},
+                {x2<<16, y2},
+              };
+              draw_tri_flat(&tri, color);
+
+              // left
+              tri = (triangle_t) {
+                {x1<<16, y1},
+                {x3<<16, y3},
+                {x3<<16, y4},
+              };
+              draw_tri_flat(&tri, color);
+
+              tri = (triangle_t) {
+                {x1<<16, y1},
+                {x1<<16, y2},
+                {x3<<16, y4},
+              };
+              draw_tri_flat(&tri, color);
+
+              // right
+              tri = (triangle_t) {
+                {x2<<16, y1},
+                {x4<<16, y3},
+                {x4<<16, y4},
+              };
+              draw_tri_flat(&tri, color);
+
+              tri = (triangle_t) {
+                {x2<<16, y1},
+                {x2<<16, y2},
+                {x4<<16, y4},
+              };
+              draw_tri_flat(&tri, color);
               
             } else {
               draw_line(x1, y1, x3, y3, color);
@@ -163,7 +211,8 @@ void render_actors_view(actor_t* actor) {
             }
             
             if (sec.props&PROP_SOLID) {
-              //draw_rect_fill(x1, y1, x2, y2, color);
+              // front
+              draw_rect_fill(x1, y1, x2, y2, color);
             } else {
               draw_line(x3, y3, x4, y3, color);
               draw_line(x3, y4, x4, y4, color);
