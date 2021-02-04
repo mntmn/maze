@@ -94,18 +94,18 @@ void render_actors_view(actor_t* actor) {
 
   int cx = SCREEN_W/2;
   int cy = SCREEN_H/2;
-  
+
   int scale = SCREEN_W/4;
 
   int xstep = 1;
   int zstep = -1;
-  
+
   for (int rz=vd; rz!=0; rz+=zstep) {
     for (int y=-vh; y<=vh; y++) {
       for (int x=-vw; x<=vw; x+=xstep) {
         int wx, wy, wz;
         wy = ay+y;
-        
+
         if (actor->look == 0) {
           wx = ax+x;
           wz = az+rz;
@@ -119,7 +119,7 @@ void render_actors_view(actor_t* actor) {
           wx = ax-rz;
           wz = az+x;
         }
-        
+
         if (in_bounds(wx,wy,wz)) {
           sector_t sec = world_get(wx,wy,wz);
 
@@ -132,16 +132,16 @@ void render_actors_view(actor_t* actor) {
             if (player.health<5) lz+=2;
             if (player.health<3) lz+=4;
             if (player.health<2) lz+=8;
-            
+
             color = color_darken(sec.color, lz);
-            
+
             /* draw a box here */
             /* project */
             int32_t x1 = cx + (x*scale)/z;
             int32_t x2 = cx + ((x+1)*scale)/z;
             int32_t x3 = cx + (x*scale)/(z+1);
             int32_t x4 = cx + ((x+1)*scale)/(z+1);
-          
+
             int32_t y1 = cy + (y*scale)/z;
             int32_t y2 = cy + ((y+1)*scale)/z;
             int32_t y3 = cy + (y*scale)/(z+1);
@@ -150,19 +150,19 @@ void render_actors_view(actor_t* actor) {
             if (sec.props&PROP_WIRE) {
               int lx = sin(T)*2;
               int ly = cos(T)*5;
-              
+
               // local fuzz
               x1+=lx;
               x2+=lx;
               x3+=lx;
               x4+=lx;
-            
+
               y1+=ly;
               y2+=ly;
               y3+=ly;
               y4+=ly;
             }
-          
+
             if (sec.props&PROP_SOLID) {
               // the back is never visible
               //draw_rect_fill(x3, y3, x4, y4, color_darken(color,2));
@@ -175,7 +175,7 @@ void render_actors_view(actor_t* actor) {
 
             if (sec.props&PROP_SOLID) {
               px_t color2 = color_darken(sec.color, 2);
-              
+
               // top
               triangle_t tri = {
                 {(x1)<<16, y1},
@@ -183,7 +183,7 @@ void render_actors_view(actor_t* actor) {
                 {(x2)<<16, y1},
               };
               draw_tri_flat(&tri, color);
-              
+
               tri = (triangle_t) {
                 {x4<<16, y3},
                 {x3<<16, y3},
@@ -198,7 +198,7 @@ void render_actors_view(actor_t* actor) {
                 {x2<<16, y2},
               };
               draw_tri_flat(&tri, color);
-              
+
               tri = (triangle_t) {
                 {x4<<16, y4},
                 {x3<<16, y4},
@@ -235,14 +235,14 @@ void render_actors_view(actor_t* actor) {
                 {x4<<16, y4},
               };
               draw_tri_flat(&tri, color);
-              
+
             } else {
               draw_line(x1, y1, x3, y3, color);
               draw_line(x2, y1, x4, y3, color);
               draw_line(x1, y2, x3, y4, color);
               draw_line(x2, y2, x4, y4, color);
             }
-            
+
             if (sec.props&PROP_SOLID) {
               // front
               draw_rect_fill(x1, y1, x2, y2, color);
@@ -263,13 +263,13 @@ void render_actors_view(actor_t* actor) {
               int z = rz;
               int lz = (rz+1)/2;
               if (lz<1) lz=1;
-                        
+
               /* project */
               int32_t x1 = cx + (x*scale)/z;
               int32_t x2 = cx + ((x+1)*scale)/z;
               int32_t x3 = cx + (x*scale)/(z+1);
               int32_t x4 = cx + ((x+1)*scale)/(z+1);
-          
+
               int32_t y1 = cy + (y*scale)/z;
               int32_t y2 = cy + ((y+1)*scale)/z;
               int32_t y3 = cy + (y*scale)/(z+1);
@@ -302,7 +302,7 @@ void render_actors_view(actor_t* actor) {
 void seed_world() {
   for (uint32_t i=0; i<DIM_Z*DIM_Y*DIM_X; i++) {
     int16_t r = pseudo_rand();
-    
+
     if (r>32700) {
       sector_t sec = {
         PROP_WIRE,
@@ -375,7 +375,7 @@ int process_gravity(actor_t* player) {
 
 int process_enemies(int step) {
   int res = ERES_NONE;
-  
+
   for (int i=0; i<NUM_ENEMIES; i++) {
     int dx=0, dz=0;
     process_gravity(&enemies[i]);
@@ -424,12 +424,14 @@ void init_game() {
   player.y = 127;
   player.z = 122;
   player.health = 10;
+  player.look = 0;
 
   enemies[0].x = 127;
   enemies[0].y = 40;
   enemies[0].z = 129;
   enemies[0].health = 10;
-  
+  enemies[0].look = 0;
+
   seed_world();
 }
 
@@ -442,9 +444,9 @@ int main(int argc, char** argv) {
   draw_load_font();
 
   init_game();
-  
+
   ui_init("MAZE");
-  
+
   while (running) {
     T += 0.1;
 
@@ -519,7 +521,7 @@ int main(int argc, char** argv) {
       if (eres == ERES_WOUND) {
         fx_wound = 5;
       }
-      
+
       if (process_gravity(&player) == 1) {
         /*
           you left the map = won!
@@ -575,7 +577,7 @@ int main(int argc, char** argv) {
         }
       }
     }
-    
+
     last_keycode = input.keycode;
 
     //printf("%d %d %d key: %d\n",player.x,player.y,player.z,input.keycode);
