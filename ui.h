@@ -2,6 +2,7 @@
 #define _UI_H
 
 #include <stdint.h>
+#include <stdlib.h>
 #include "platform.h"
 
 typedef struct input {

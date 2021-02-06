@@ -10,13 +10,17 @@
 #define DIM_Y 256
 #define DIM_Z 256
 
-#define PROP_SOLID 2
 #define PROP_WIRE 1
+#define PROP_SOLID 2
+#define PROP_DOOR 4
 
 #define GST_INTRO 0
 #define GST_PLAY 1
 #define GST_WON 2
 #define GST_LOST 3
+#define GST_MOVE 4
+
+#define enable_solids 1
 
 int game_state = GST_INTRO;
 
@@ -33,17 +37,19 @@ static sector_t world[DIM_X * DIM_Y * DIM_Z];
 
 typedef struct actor {
   char* name;
-  uint16_t x;
-  uint16_t y;
-  uint16_t z;
-  int8_t look; // view rotation around y axis; index into look_xz list
-  int8_t health;
+  int x;
+  int y;
+  int z;
+  int look; // view rotation around y axis; index into look_xz list
+  int health;
+  int move_dir;
+  int move_counter;
 } actor_t;
 
-int8_t rot_walk_x[] = {0,1,0,-1};
-int8_t rot_walk_z[] = {1,0,-1,0};
-int8_t rot_strafe_x[] = {1,0,-1,0};
-int8_t rot_strafe_z[] = {0,-1,0,1};
+int rot_walk_x[] = {0,1,0,-1};
+int rot_walk_z[] = {1,0,-1,0};
+int rot_strafe_x[] = {1,0,-1,0};
+int rot_strafe_z[] = {0,-1,0,1};
 
 int NUM_ENEMIES = 1;
 
@@ -80,8 +86,132 @@ int16_t pseudo_rand(void)
     return (int16_t)(pr_next / 65536) % 32768;
 }
 
-float T = 0.0;
+double T = 0.0;
 int fx_wound = 0;
+
+void render_sector_box(sector_t* sec, int x1, int x2, int x3, int x4, int y1, int y2, int y3, int y4) {
+  int cx = SCREEN_W/2;
+  int cy = SCREEN_H/2;
+  px_t color2 = color_darken(sec->color, 2);
+  px_t color3 = color_darken(sec->color, 3);
+  
+  if (sec->props&PROP_WIRE) {
+    int lx = sin(T)*2;
+    int ly = cos(T)*5;
+
+    // local fuzz
+    x1+=lx;
+    x2+=lx;
+    x3+=lx;
+    x4+=lx;
+
+    y1+=ly;
+    y2+=ly;
+    y3+=ly;
+    y4+=ly;
+  }
+  
+  if (enable_solids && sec->props&PROP_SOLID) {
+    // the back is never visible
+    //draw_rect_fill(x3, y3, x4, y4, color_darken(color,2));
+  } else {
+    draw_line(x1, y1, x2, y1, sec->color);
+    draw_line(x1, y2, x2, y2, sec->color);
+    draw_line(x1, y1, x1, y2, sec->color);
+    draw_line(x2, y1, x2, y2, sec->color);
+  }
+
+  if (enable_solids && sec->props&PROP_SOLID) {
+    triangle_t tri;
+
+    if (y1>cy && y3>cy) {
+      // top
+      tri = (triangle_t) {
+        {(x1)<<16, y1},
+        {(x3)<<16, y3},
+        {(x2)<<16, y1},
+      };
+      draw_tri_flat(&tri, sec->color);
+
+      tri = (triangle_t) {
+        {x4<<16, y3},
+        {x3<<16, y3},
+        {x2<<16, y1},
+      };
+      draw_tri_flat(&tri, sec->color);
+    }
+    
+    if (y1<cy && y3<cy) {
+      // bottom
+      tri = (triangle_t) {
+        {x1<<16, y2},
+        {x3<<16, y4},
+        {x2<<16, y2},
+        };
+        draw_tri_flat(&tri, sec->color);
+
+        tri = (triangle_t) {
+        {x4<<16, y4},
+        {x3<<16, y4},
+        {x2<<16, y2},
+        };
+        draw_tri_flat(&tri, sec->color);
+    }
+    
+    if (x3>cx && x4>cx) {
+      // left
+      tri = (triangle_t) {
+        {x1<<16, y1},
+        {x3<<16, y3},
+        {x3<<16, y4},
+      };
+      draw_tri_flat(&tri, sec->color);
+
+      tri = (triangle_t) {
+        {x1<<16, y1},
+        {x1<<16, y2},
+        {x3<<16, y4},
+      };
+      draw_tri_flat(&tri, sec->color);
+    }
+    
+    if (x1<cx && x2<cx) {
+      // right
+      tri = (triangle_t) {
+        {x2<<16, y1},
+        {x4<<16, y3},
+        {x4<<16, y4},
+      };
+      draw_tri_flat(&tri, color3);
+
+      tri = (triangle_t) {
+        {x2<<16, y1},
+        {x2<<16, y2},
+        {x4<<16, y4},
+      };
+      draw_tri_flat(&tri, color3);
+    }
+  } else {
+    draw_line(x1, y1, x3, y3, sec->color);
+    draw_line(x2, y1, x4, y3, sec->color);
+    draw_line(x1, y2, x3, y4, sec->color);
+    draw_line(x2, y2, x4, y4, sec->color);
+  }
+
+  if (enable_solids && sec->props&PROP_SOLID) {
+    // front
+    if (y1>(SCREEN_H*750)/1000) {
+      draw_rect_fill(x1, y1+1, x2, y2, sec->color);
+    } else {
+      draw_rect_fill(x1, y1+1, x2, y2, color2);
+    }
+  } else {
+    draw_line(x3, y3, x4, y3, sec->color);
+    draw_line(x3, y4, x4, y4, sec->color);
+    draw_line(x3, y3, x3, y4, sec->color);
+    draw_line(x4, y3, x4, y4, sec->color);
+  }
+}
 
 void render_actors_view(actor_t* actor) {
   int ax=actor->x;
@@ -99,13 +229,26 @@ void render_actors_view(actor_t* actor) {
 
   int xstep = 1;
   int zstep = -1;
+  int ystep = -1;
 
   for (int rz=vd; rz!=0; rz+=zstep) {
-    for (int y=-vh; y<=vh; y++) {
-      for (int x=-vw; x<=vw; x+=xstep) {
+    for (int ry=vh; ry!=-vh; ry+=ystep) {
+      for (int rx=-vw; rx<=vw; rx+=xstep) {
+
+        int x = rx;
+        if (rx>=0) {
+          // reverse render direction in the middle
+          x = vw - rx;
+        }
+        int y = ry;
+        if (ry<0) {
+          // reverse render direction in the middle
+          //y = -vh + ry;
+        }
+        
         int wx, wy, wz;
         wy = ay+y;
-
+        
         if (actor->look == 0) {
           wx = ax+x;
           wz = az+rz;
@@ -125,156 +268,35 @@ void render_actors_view(actor_t* actor) {
 
           px_t color = 0x333333;
 
+          int z = rz;
+          int lz = (rz+1)/2;
+          if (lz<1) lz=1;
+          if (player.health<5) lz+=2;
+          if (player.health<3) lz+=4;
+          if (player.health<2) lz+=8;
+
+          int zz = z*10 - rot_walk_z[player.move_dir]*player.move_counter;
+          int xx = x*10 + rot_walk_x[player.move_dir]*player.move_counter;
+          int yy = y*10;
+
+          /* project a box */
+          int32_t x1 = cx + (xx*scale)/zz;
+          int32_t x2 = cx + ((xx+10)*scale)/zz;
+          int32_t x3 = cx + (xx*scale)/(zz+10);
+          int32_t x4 = cx + ((xx+10)*scale)/(zz+10);
+
+          int32_t y1 = cy + (yy*scale)/zz;
+          int32_t y2 = cy + ((yy+10)*scale)/zz;
+          int32_t y3 = cy + (yy*scale)/(zz+10);
+          int32_t y4 = cy + ((yy+10)*scale)/(zz+10);
+
           if (sec.props>0) {
-            int z = rz;
-            int lz = (rz+1)/2;
-            if (lz<1) lz=1;
-            if (player.health<5) lz+=2;
-            if (player.health<3) lz+=4;
-            if (player.health<2) lz+=8;
-
-            color = color_darken(sec.color, lz);
-
-            /* draw a box here */
-            /* project */
-            int32_t x1 = cx + (x*scale)/z;
-            int32_t x2 = cx + ((x+1)*scale)/z;
-            int32_t x3 = cx + (x*scale)/(z+1);
-            int32_t x4 = cx + ((x+1)*scale)/(z+1);
-
-            int32_t y1 = cy + (y*scale)/z;
-            int32_t y2 = cy + ((y+1)*scale)/z;
-            int32_t y3 = cy + (y*scale)/(z+1);
-            int32_t y4 = cy + ((y+1)*scale)/(z+1);
-
-            if (sec.props&PROP_WIRE) {
-              int lx = sin(T)*2;
-              int ly = cos(T)*5;
-
-              // local fuzz
-              x1+=lx;
-              x2+=lx;
-              x3+=lx;
-              x4+=lx;
-
-              y1+=ly;
-              y2+=ly;
-              y3+=ly;
-              y4+=ly;
-            }
-
-            if (sec.props&PROP_SOLID) {
-              // the back is never visible
-              //draw_rect_fill(x3, y3, x4, y4, color_darken(color,2));
-            } else {
-              draw_line(x1, y1, x2, y1, color);
-              draw_line(x1, y2, x2, y2, color);
-              draw_line(x1, y1, x1, y2, color);
-              draw_line(x2, y1, x2, y2, color);
-            }
-
-            if (sec.props&PROP_SOLID) {
-              px_t color2 = color_darken(sec.color, 2);
-
-              // top
-              triangle_t tri = {
-                {(x1)<<16, y1},
-                {(x3)<<16, y3},
-                {(x2)<<16, y1},
-              };
-              draw_tri_flat(&tri, color);
-
-              tri = (triangle_t) {
-                {x4<<16, y3},
-                {x3<<16, y3},
-                {x2<<16, y1},
-              };
-              draw_tri_flat(&tri, color);
-
-              // bottom
-              tri = (triangle_t) {
-                {x1<<16, y2},
-                {x3<<16, y4},
-                {x2<<16, y2},
-              };
-              draw_tri_flat(&tri, color);
-
-              tri = (triangle_t) {
-                {x4<<16, y4},
-                {x3<<16, y4},
-                {x2<<16, y2},
-              };
-              draw_tri_flat(&tri, color);
-
-              // left
-              tri = (triangle_t) {
-                {x1<<16, y1},
-                {x3<<16, y3},
-                {x3<<16, y4},
-              };
-              draw_tri_flat(&tri, color);
-
-              tri = (triangle_t) {
-                {x1<<16, y1},
-                {x1<<16, y2},
-                {x3<<16, y4},
-              };
-              draw_tri_flat(&tri, color);
-
-              // right
-              tri = (triangle_t) {
-                {x2<<16, y1},
-                {x4<<16, y3},
-                {x4<<16, y4},
-              };
-              draw_tri_flat(&tri, color);
-
-              tri = (triangle_t) {
-                {x2<<16, y1},
-                {x2<<16, y2},
-                {x4<<16, y4},
-              };
-              draw_tri_flat(&tri, color);
-
-            } else {
-              draw_line(x1, y1, x3, y3, color);
-              draw_line(x2, y1, x4, y3, color);
-              draw_line(x1, y2, x3, y4, color);
-              draw_line(x2, y2, x4, y4, color);
-            }
-
-            if (sec.props&PROP_SOLID) {
-              // front
-              draw_rect_fill(x1, y1, x2, y2, color);
-            } else {
-              draw_line(x3, y3, x4, y3, color);
-              draw_line(x3, y4, x4, y4, color);
-              draw_line(x3, y3, x3, y4, color);
-              draw_line(x4, y3, x4, y4, color);
-            }
-
-            //draw_fill(x1+1, y1+1, color);
+            render_sector_box(&sec,x1,x2,x3,x4,y1,y2,y3,y4);
           }
 
           // render enemies
-
           for (int i=0; i<NUM_ENEMIES; i++) {
             if (enemies[i].x==wx && enemies[i].y==wy && enemies[i].z==wz) {
-              int z = rz;
-              int lz = (rz+1)/2;
-              if (lz<1) lz=1;
-
-              /* project */
-              int32_t x1 = cx + (x*scale)/z;
-              int32_t x2 = cx + ((x+1)*scale)/z;
-              int32_t x3 = cx + (x*scale)/(z+1);
-              int32_t x4 = cx + ((x+1)*scale)/(z+1);
-
-              int32_t y1 = cy + (y*scale)/z;
-              int32_t y2 = cy + ((y+1)*scale)/z;
-              int32_t y3 = cy + (y*scale)/(z+1);
-              int32_t y4 = cy + ((y+1)*scale)/(z+1);
-
               int32_t x5 = (x1+x2)/2;
               int32_t x6 = (x3+x4)/2;
 
@@ -300,30 +322,38 @@ void render_actors_view(actor_t* actor) {
 }
 
 void seed_world() {
-  for (uint32_t i=0; i<DIM_Z*DIM_Y*DIM_X; i++) {
-    int16_t r = pseudo_rand();
-
-    if (r>32700) {
-      sector_t sec = {
-        PROP_WIRE,
-        0xffffff,
-        0,0,0
-      };
-      world[i]=sec;
+  sector_t sec = {
+    0,
+    0,
+    0,0,0
+  };
+  
+  for (uint32_t y=0; y<DIM_Y; y++) {
+    for (uint32_t x=0; x<DIM_X; x++) {
+      for (uint32_t z=0; z<DIM_Z; z++) {
+        world_put(x, y, z, sec);
+      }
     }
-    else if (r>32000) {
-      /*sector_t sec = {
-        PROP_WIRE,
-        0xffffff,
-        pseudo_rand()/2000,
-        pseudo_rand()/2000,
-        pseudo_rand()/2000,
-      };
-      world[i]=sec;*/
+  }
+  
+  for (uint32_t y=0; y<125; y++) {
+    for (uint32_t x=0; x<DIM_X; x++) {
+      for (uint32_t z=0; z<DIM_Z; z++) {
+        int16_t r = pseudo_rand();
+
+        if (r>32000) {
+          sec = (sector_t) {
+            PROP_WIRE,
+            0xffffff,
+            0,0,0
+          };
+          world_put(x, y, z, sec);
+        }
+      }
     }
   }
 
-  sector_t sec = {
+  sec = (sector_t) {
     PROP_SOLID,
     0xffffff,
     0,0,0
@@ -334,6 +364,8 @@ void seed_world() {
     for (int z=0; z<DIM_Z; z++) {
       sec.props = PROP_SOLID;
       sec.color = 0x008800;
+      // stripe
+      if (z==129) sec.color=0xffffff;
       world_put(x, 128, z, sec);
     }
   }
@@ -354,6 +386,25 @@ void seed_world() {
   world_put(127, 128, 131, sec);
   world_put(126, 128, 130, sec);
   world_put(127, 128, 130, sec);
+
+  // wall around the hole
+  for (int x=127-5; x<127+5; x++) {
+    for (int z=127-5; z<127+5; z++) {
+      if (x==127-5 || x==127+4 || z==127-5 || z==127+4) {
+        sec.props = PROP_SOLID;
+        sec.color = 0x0000ff;
+        world_put(x, 127, z, sec);
+        world_put(x, 126, z, sec);
+        sec.props = PROP_WIRE;
+        world_put(x, 125, z, sec);
+      }
+    }
+  }
+
+  // a door
+  sec.props = PROP_SOLID|PROP_DOOR;
+  sec.color = 0xff00ff;
+  world_put(127, 127, 127-5, sec);
 }
 
 int process_gravity(actor_t* player) {
@@ -412,6 +463,32 @@ int process_enemies(int step) {
   return res;
 }
 
+void process_play() {
+  int enemy_step = 0;
+  int timer = ((int)T)%3;
+  //printf("timer: %d\n",timer);
+  //if (timer==0 && timer!=last_timer) enemy_step = 1;
+
+  //last_timer = timer;
+
+  int eres = process_enemies(enemy_step);
+
+  if (eres == ERES_WOUND) {
+    fx_wound = 5;
+  }
+
+  if (process_gravity(&player) == 1) {
+    /*
+      you left the map = won!
+    */
+    game_state = GST_WON;
+  }
+
+  if (player.health<1) {
+    game_state = GST_LOST;
+  }
+}
+
 uint32_t STR_GAME_OVER[] = {'G','A','M','E',' ','O','V','E','R',0};
 uint32_t STR_GAME_WON[] = {'*','Y','O','U',' ','W','O','N','*',0};
 uint32_t STR_GAME_INTRO1[] = {'E','S','C','A','P','E',0};
@@ -422,7 +499,7 @@ void init_game() {
   player.name = "i";
   player.x = 127;
   player.y = 127;
-  player.z = 122;
+  player.z = 110;
   player.health = 10;
   player.look = 0;
 
@@ -434,6 +511,64 @@ void init_game() {
 
   seed_world();
 }
+
+int walk_coords(int* x, int* y, int* z, int look, int dir) {
+  int dx = *x;
+  int dy = *y;
+  int dz = *z;
+  if (dir == 0) {
+    dx+=rot_walk_x[look];
+    dz+=rot_walk_z[look];
+  } else if (dir == 2) {
+    dx-=rot_walk_x[look];
+    dz-=rot_walk_z[look];
+  } else if (dir == 1) {
+    dx-=rot_strafe_x[look];
+    dz-=rot_strafe_z[look];
+  } else if (dir == 3) {
+    dx+=rot_strafe_x[look];
+    dz+=rot_strafe_z[look];
+  }
+  *x=dx;
+  *y=dy;
+  *z=dz;
+}
+
+int walkable(int x, int y, int z, int look, int dir) {
+  int dx = x;
+  int dy = y;
+  int dz = z;
+  walk_coords(&dx, &dy, &dz, look, dir);
+  
+  if (!in_bounds(dx, dy, dz)) return 0;
+  sector_t sec = world_get(dx, dy, dz);
+  if (sec.props & PROP_SOLID) return 0;
+  return 1;
+}
+
+int interact(int x, int y, int z, int look, int dir) {
+  int dx = x;
+  int dy = y;
+  int dz = z;
+  walk_coords(&dx, &dy, &dz, look, dir);
+
+  if (!in_bounds(dx, dy, dz)) return 0;
+  sector_t sec = world_get(dx, dy, dz);
+
+  if (sec.props & PROP_DOOR) {
+    if (sec.props & PROP_SOLID) {
+      sec.props = PROP_DOOR|PROP_WIRE;
+    } else {
+      sec.props = PROP_DOOR|PROP_SOLID;
+    }
+    world_put(dx, dy, dz, sec);
+    return 1;
+  }
+  
+  return 0;
+}
+
+#define MOVE_STEPS 10
 
 int main(int argc, char** argv) {
   uint8_t running = 1;
@@ -456,20 +591,47 @@ int main(int argc, char** argv) {
 
     render_actors_view(&player);
 
-    if (game_state == GST_PLAY) {
+    if (game_state == GST_MOVE) {
+      player.move_counter++;
+      if (player.move_counter == MOVE_STEPS) {
+        player.move_counter = 0;
+        if (player.move_dir == 0) {
+          player.x+=rot_walk_x[player.look];
+          player.z+=rot_walk_z[player.look];
+        } else if (player.move_dir == 2) {
+          player.x-=rot_walk_x[player.look];
+          player.z-=rot_walk_z[player.look];
+        } else if (player.move_dir == 1) {
+          player.x-=rot_strafe_x[player.look];
+          player.z-=rot_strafe_z[player.look];
+        } else if (player.move_dir == 3) {
+          player.x+=rot_strafe_x[player.look];
+          player.z+=rot_strafe_z[player.look];
+        }
+        game_state = GST_PLAY;
+      }
+      process_play();
+    }
+    else if (game_state == GST_PLAY) {
       if (last_keycode!=input.keycode) {
         if (input.keycode == 27) {
           game_state = GST_LOST;
         }
         else if (input.keycode == 82 || input.keycode == 119) {
           // north
-          player.x+=rot_walk_x[player.look];
-          player.z+=rot_walk_z[player.look];
+          if (walkable(player.x,player.y,player.z,player.look,0)) {
+            player.move_dir = 0;
+            player.move_counter = 0;
+            game_state = GST_MOVE;
+          }
         }
         else if (input.keycode == 81 || input.keycode == 115) {
           // south
-          player.x-=rot_walk_x[player.look];
-          player.z-=rot_walk_z[player.look];
+          if (walkable(player.x,player.y,player.z,player.look,2)) {
+            player.move_dir = 2;
+            player.move_counter = 0;
+            game_state = GST_MOVE;
+          }
         }
         else if (input.keycode == 79) {
           // east
@@ -481,13 +643,19 @@ int main(int argc, char** argv) {
         }
         else if (input.keycode == 97) {
           // A
-          player.x-=rot_strafe_x[player.look];
-          player.z-=rot_strafe_z[player.look];
+          if (walkable(player.x,player.y,player.z,player.look,1)) {
+            player.move_dir = 1;
+            player.move_counter = 0;
+            game_state = GST_MOVE;
+          }
         }
         else if (input.keycode == 100) {
           // D
-          player.x+=rot_strafe_x[player.look];
-          player.z+=rot_strafe_z[player.look];
+          if (walkable(player.x,player.y,player.z,player.look,3)) {
+            player.move_dir = 3;
+            player.move_counter = 0;
+            game_state = GST_MOVE;
+          }
         }
         else if (input.keycode == 78) {
           // up
@@ -498,40 +666,13 @@ int main(int argc, char** argv) {
           player.y--;
         }
         else if (input.keycode == 32) {
+          // space:
           // action
-          world_put(player.x, player.y, player.z+2, (sector_t){
-              PROP_SOLID,
-              0x0000ff,
-              0,
-              0,
-              0
-            });
+          interact(player.x, player.y, player.z, player.look, 0);
         }
       }
 
-      int enemy_step = 0;
-      int timer = ((int)T)%3;
-      //printf("timer: %d\n",timer);
-      if (timer==0 && timer!=last_timer) enemy_step = 1;
-
-      last_timer = timer;
-
-      int eres = process_enemies(enemy_step);
-
-      if (eres == ERES_WOUND) {
-        fx_wound = 5;
-      }
-
-      if (process_gravity(&player) == 1) {
-        /*
-          you left the map = won!
-        */
-        game_state = GST_WON;
-      }
-
-      if (player.health<1) {
-        game_state = GST_LOST;
-      }
+      process_play();
     } else if (game_state == GST_LOST) {
       uint16_t rand_offset = pseudo_rand()%0xff00;
       if (((int)T)%20 != 0) rand_offset = 0xfee0;
