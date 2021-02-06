@@ -447,10 +447,14 @@ int process_enemies(int step) {
       }
 
       if (dx||dz) {
-        if (pseudo_rand()>0) {
-          enemies[i].x+=dx;
-        } else {
-          enemies[i].z+=dz;
+        sector_t sec = world_get(enemies[i].x+dx, enemies[i].y, enemies[i].z+dz);
+
+        if (!(sec.props&PROP_SOLID)) {
+          if (pseudo_rand()>0) {
+            enemies[i].x+=dx;
+          } else {
+            enemies[i].z+=dz;
+          }
         }
       } else if (enemies[i].y == player.y) {
         /* enemy attacks */
@@ -463,13 +467,15 @@ int process_enemies(int step) {
   return res;
 }
 
+int last_timer=0;
+
 void process_play() {
   int enemy_step = 0;
   int timer = ((int)T)%3;
   //printf("timer: %d\n",timer);
-  //if (timer==0 && timer!=last_timer) enemy_step = 1;
+  if (timer==0 && timer!=last_timer) enemy_step = 1;
 
-  //last_timer = timer;
+  last_timer = timer;
 
   int eres = process_enemies(enemy_step);
 
@@ -574,8 +580,7 @@ int main(int argc, char** argv) {
   uint8_t running = 1;
   input_t input;
   int last_keycode=0;
-  int last_timer=0;
-
+  
   draw_load_font();
 
   init_game();
